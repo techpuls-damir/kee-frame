@@ -13,7 +13,7 @@
                  [cljs-ajax "0.8.0"]
                  [org.clojure/core.async "0.3.442"]
                  [jarohen/chord "0.8.1"]
-                 [venantius/accountant "0.2.4"]
+                 [venantius/accountant "0.2.4-x-SNAPSHOT"]
                  [org.clojure/core.match "0.3.0-alpha5"]
                  [expound "0.7.2"]
                  [day8.re-frame/test "0.1.5"]
