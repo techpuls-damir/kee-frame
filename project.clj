@@ -1,4 +1,4 @@
-(defproject kee-frame "0.3.4-techpuls-SNAPSHOT"
+(defproject kee-frame "0.3.4-x-SNAPSHOT"
   :description "A micro-framework on top of re-frame"
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
