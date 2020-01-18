@@ -23,13 +23,19 @@
                       (s/explain-data ::spec/event-vector dispatch))))
     (rf/dispatch dispatch)))
 
+(defn delay-start-js [thunk]
+  #?(:cljs (js/setTimeout thunk 0)
+     :clj  (thunk)))
+
 (defn start! [id ctx start params]
   (when start
-    (when @state/debug?
-      (rf/console :log "Starting controller " id " with params " params))
-    (cond
-      (vector? start) (rf/dispatch (conj start params))
-      (ifn? start) (validate-and-dispatch! (start ctx params)))))
+    (delay-start-js
+      #(do
+         (when @state/debug?
+           (rf/console :log "Starting controller " id " with params " params))
+         (cond
+           (vector? start) (rf/dispatch (conj start params))
+           (ifn? start) (validate-and-dispatch! (start ctx params)))))))
 
 (defn stop! [id ctx stop]
   (when stop

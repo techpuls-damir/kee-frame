@@ -1,4 +1,4 @@
-(defproject kee-frame "0.3.4-x-SNAPSHOT"
+(defproject kee-frame "0.3.4-x-1-SNAPSHOT"
   :description "A micro-framework on top of re-frame"
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
@@ -20,8 +20,7 @@
                  [breaking-point "0.1.2"]
                  [pez/clerk "1.0.0"]]
 
-  :plugins [[com.jakemccrary/lein-test-refresh "0.20.0"]
-            [venantius/ultra "0.5.2"]]
+  :plugins [[com.jakemccrary/lein-test-refresh "0.20.0"]]
   :deploy-repositories [["clojars" {:sign-releases false
                                     :url           "https://clojars.org/repo"
                                     :username      :env/clojars_username
