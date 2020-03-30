@@ -3,6 +3,7 @@
             [re-frame.core :as rf]
             [re-chain.core :as chain]
             [kee-frame.api :as api :refer [dispatch-current! navigate! url->data data->url]]
+            [kee-frame.interop :as interop]
             [kee-frame.state :as state]
             [kee-frame.scroll :as scroll]
             [kee-frame.controller :as controller]
@@ -32,10 +33,12 @@
           (rf/console :error "No match found for path " path)
           (rf/console :groupEnd)))))
 
+(s/def ::reitit-route-data (s/cat :route-name keyword? :path-params (s/* (s/map-of keyword? any?))))
+
 (defn assert-route-data [data]
-  (when-not (s/valid? ::spec/route-data data)
-    (e/expound ::spec/route-data data)
-    (throw (ex-info "Bad route data input" (s/explain-data ::spec/route-data data)))))
+  (when-not (s/valid? ::reitit-route-data data)
+    (e/expound ::reitit-route-data data)
+    (throw (ex-info "Bad route data input" (s/explain-data ::reitit-route-data data)))))
 
 (defn url-not-found [routes data]
   (throw (ex-info "Could not find url for the provided data"
@@ -54,7 +57,7 @@
          (when-some [h (:hash path-params)] (str "#" h)))))
 
 (defn match-url [routes url]
-  (let [[path+query fragment] (-> url (str/replace #"^/#" "") (str/split #"#" 2))
+  (let [[path+query fragment] (-> url (str/replace #"^/#/" "/") (str/split #"#" 2))
         [path query] (str/split path+query #"\?" 2)]
     (some-> (reitit/match-by-path routes path)
             (assoc :query-string query :hash fragment))))
@@ -85,9 +88,15 @@
 (rf/reg-event-db :init (fn [db [_ initial]] (merge initial db)))
 
 
+(defn debug-enabled? []
+  (let [{:keys [routes?]
+         :or   {routes? true}}  @state/debug-config]
+    (and @state/debug?
+         routes?)))
+
 (defn reg-route-event [scroll]
   (rf/reg-event-fx ::route-changed
-                   (if @state/debug? [rf/debug])
+                   (when (debug-enabled?) [rf/debug])
                    (fn [{:keys [db] :as ctx} [_ route]]
                      (when scroll
                        (scroll/monitor-requests! route))
@@ -97,11 +106,14 @@
                               {:dispatch-later [{:ms       50
                                                  :dispatch [::scroll/poll route 0]}]})))))
 
-(defn start! [{:keys [routes initial-db router hash-routing? route-start app-db-spec debug? root-component chain-links screen scroll]
+(defn start! [{:keys [routes initial-db router hash-routing? route-start app-db-spec debug? root-component chain-links
+                      screen scroll debug-config]
                :or   {debug? false
                       scroll true}}]
+  (interop/set-log-level! debug-config)
   (reset! state/app-db-spec app-db-spec)
   (reset! state/debug? debug?)
+  (reset! state/debug-config debug-config)
   (chain/configure! (concat default-chain-links
                             chain-links))
 

@@ -2,11 +2,11 @@
   (:require [kee-frame.api :as api]
             [accountant.core :as accountant]
             [reagent.core :as reagent]
+            [reagent.dom :as dom]
             [re-frame.core :as rf]
             [day8.re-frame.http-fx]
-            [chord.client :as chord]
             [breaking-point.core :as bp]
-            [clojure.string :as str]))
+            [re-frame.loggers :as rf.log]))
 
 (defrecord AccountantNavigator []
   api/Navigator
@@ -14,18 +14,6 @@
     (accountant/dispatch-current!))
   (navigate! [_ url]
     (accountant/navigate! url)))
-
-(def create-socket chord/ws-ch)
-
-(defn websocket-url [path]
-  (if (str/starts-with? path "/")
-    (str (if (= "https:" (-> js/document .-location .-protocol))
-           "wss://"
-           "ws://")
-         (-> js/document .-location .-host)
-         path)
-    ;; Consider this an url for now.
-    path))
 
 (defn make-navigator
   [opts]
@@ -35,8 +23,8 @@
 (defn render-root [root-component]
   (when root-component
     (if-let [app-element (.getElementById js/document "app")]
-      (reagent/render root-component
-                      app-element)
+      (dom/render root-component
+                  app-element)
       (throw (ex-info "Could not find element with id 'app' to mount app into" {:component root-component})))))
 
 (defn breakpoints-or-defaults [breakpoints]
@@ -55,3 +43,17 @@
 
 (defn set-breakpoints [breakpoints]
   (rf/dispatch-sync [::bp/set-breakpoints (breakpoints-or-defaults breakpoints)]))
+
+(defn set-log-level! [{:keys [overwrites?]
+                       :or   {overwrites? false}}]
+  (when-not overwrites?
+    (rf.log/set-loggers!
+     {:warn (fn [& args]
+              (when-not (re-find #"^re-frame: overwriting" (first args))
+                (apply js/console.warn args)))})))
+
+(defn set-timeout [f ms]
+  (js/setTimeout f ms))
+
+(defn clear-timeout [t]
+  (js/clearTimeout t))

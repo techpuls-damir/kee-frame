@@ -5,13 +5,14 @@
             [re-frame.core :as rf :refer [console]]
             [kee-frame.spec :as spec :refer [spec-interceptor]]
             [kee-frame.debug :refer [debug-interceptor]]
+            [kee-frame.interceptors :as i]
             [clojure.spec.alpha :as s]
             [expound.alpha :as e]))
 
 ;; Interceptors used by all chains and events registered through kee-frame
-(def kee-frame-interceptors [(spec-interceptor state/app-db-spec) (debug-interceptor state/debug?) rf/trim-v])
+(def kee-frame-interceptors [i/add-global-interceptors (spec-interceptor state/app-db-spec) (debug-interceptor state/debug?) rf/trim-v])
 
-(def valid-option-key? #{:router :hash-routing? :routes :process-route :debug?
+(def valid-option-key? #{:router :hash-routing? :routes :process-route :debug? :debug-config
                          :chain-links :app-db-spec :root-component :initial-db
                          :screen :scroll :route-start})
 
@@ -47,6 +48,12 @@
       (throw (ex-info (str "Uknown startup options. Valid keys are " valid-option-key?) extras))))
   (router/start! options))
 
+(defn debug-enabled? []
+  (let [{:keys [overwrites?]
+         :or   {overwrites? false}} @state/debug-config]
+    (and @state/debug?
+         overwrites?)))
+
 (defn reg-controller
   "Put a controller config map into the global controller registry.
 
@@ -70,9 +77,10 @@
   (when-not (s/valid? ::spec/controller controller)
     (e/expound ::spec/controller controller)
     (throw (ex-info "Invalid controller" (s/explain-data ::spec/controller controller))))
-  (when (get @state/controllers id)
+  (when (and (debug-enabled?)
+             (get @state/controllers id))
     (console :warn "Overwriting controller with id " id))
-  (swap! state/controllers update id merge controller))
+  (swap! state/controllers assoc id controller))
 
 (defn reg-event-fx
   "Exactly same signature as `re-frame.core/reg-event-fx`. Use this version if you want kee-frame logging and spec validation.

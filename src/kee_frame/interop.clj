@@ -10,10 +10,6 @@
       (nav-handler url))
     (assoc this :url url)))
 
-(def create-socket (fn [& _] (throw (Exception. "Websocket client not supported on JVM"))))
-
-(defn websocket-url [_] (throw (Exception. "Websocket client not supported on JVM")))
-
 (defn make-navigator
   [opts]
   (map->TestNavigator (assoc opts :url "/")))
@@ -25,3 +21,8 @@
 (defn set-breakpoint-subs [_])
 
 (defn set-breakpoints [_])
+
+(defn set-log-level! [_])
+
+(defn set-timeout [_ _])
+(defn clear-timeout [_])

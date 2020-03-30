@@ -8,13 +8,10 @@
 
 [![cljdoc badge](https://cljdoc.xyz/badge/kee-frame/kee-frame)](https://cljdoc.xyz/d/kee-frame/kee-frame/CURRENT)
 
-[Patreon](https://www.patreon.com/ingesolvoll/)
 
+## Project status (December 2019)
 
-## Project status (March 2019)
-
-The API and functionality of kee-frame is stable and working. Currently, nothing is done to expand or fix it, as it is not broken.
-Reported bugs and inconsistencies will be fixed on demand. Pull requests are welcome.
+The API and functionality of kee-frame is stable and proven to work. Pull requests are welcome.
  
 ## Quick walkthrough
 - If you prefer, you can go straight to some [articles](http://ingesolvoll.github.io/tags/kee-frame/) or the [demo app](https://github.com/ingesolvoll/kee-frame-sample)
@@ -59,6 +56,8 @@ Call this function on figwheel reload.
              (fn [{:keys [db]} [_ league-data]]
                {:db (assoc db :league league-data)}))
 ```
+
+- You can use a Finite State Machine to handle error paths and complexity, with or without controllers and chains. See FSM doc section for details.
 
 - Make a URL for your `<a href="">` using nothing but data
 ```clojure
@@ -119,7 +118,7 @@ There are 2 simple options for bootstrapping your project:
 ### 1. Manual installation
 Add the following dependency to your `project.clj` file:
 ```clojure
-[kee-frame "0.3.3"]
+[kee-frame "0.3.4"]
 ```
 ### 2. Luminus template
 [Luminus](http://www.luminusweb.net) is a framework that makes it easy to get started with web app development
@@ -135,6 +134,9 @@ I believe this is very important, an application made several years ago should b
 
 The kee-frame API has remained stable since the launch in early 2018. Here is a list of important/breaking changes:
 * 0.3.0: Reitit replaces Bidi as the default routing library. Causes a breaking change in the data structures of routes and route matches. [The bidi router implementation can be found here, it's easy to fit back in.](https://github.com/ingesolvoll/kee-frame-sample/blob/master/src/cljs/kee_frame_sample/routers.cljs)
+* 0.3.4: Changes in log configuration, might render unexpected results in more/less logging for existing projects.
+* 0.4.0: FSM API introduced. No breaking API change, additions only.
+* 0.4.0: Websocket API moved out to separate library, to reduce bundle size. Requires separate dependency.
 
 ## Getting started
 
@@ -173,7 +175,10 @@ the route.
 
 If you provide `:root-component`, kee-frame will render that component in the DOM element with id "app". Make sure you have such an element in your index.html. You are free to do the initial rendering yourself if you want, just skip this setting. If you use this feature, make sure that `k/start!` is called every time figwheel reloads your code. 
 
-The `debug` boolean option is for enabling debug interceptors on all your events, as well as traces from the activities of controllers. 
+The `debug?` boolean option is for enabling debug interceptors on all your events, as well as traces from the activities of controllers. 
+
+For further control of debug output, use the `debug-config` option. Valid boolean keys are `:routes?`, `events?`, `:controllers?` and `:overwrites?`. All default to true,
+except `:overwrites?`. That one also removes the re-frame warnings about overwriting subs and events, which many find annoying.
 
 If you provide an `app-db-spec`, the framework will let you know when a bug in your event handler is trying to corrupt your DB structure. This is incredibly useful, so you should put down the effort to spec up your db!
 
@@ -277,6 +282,68 @@ It looks pretty much the same, only more concise. But it does help you with a fe
 * If you pass only a function reference to your reagent components (no surrounding []), kee-frame will invoke them with the route as the first parameter.
 * It will give you nice error messages when you make a mistake.
 
+## Finite State Machines (alpha since 0.4.0)
+
+#### FSM API is marked as alpha, as it is more likely to receive breaking changes for the coming months.
+
+Most people are not using state machines in their daily programming tasks. Or actually they are, it's just that the state machines are hidden
+inside normal code, incomplete and filled with fresh custom made bugs. A `{:loading true}` here, a missing `:on-failure` there. You may get
+it right eventually, but it's hard to read the distributed state logic and it is easy to mess it up later.
+
+A kee-frame event chain is a kind of state machine. But in the examples, it only handles the
+happy path of successful HTTP requests. It does not have a good answer to error handling, and you have to make custom solutions for displaying
+the state of an ongoing process (retrying, loading, sending, failed etc).
+
+Here's the structure of an FSM in kee-frame:
+
+```clojure
+(def my-http-request-fsm
+   {:id    :my-http-request
+    :start ::loading
+    :stop  ::loaded
+    :fsm   {::loading        {[::fsm/on-enter]      {:dispatch [[:contact-the-server]]}
+                              [:server-responded]   {:to ::loaded}
+                              [:default-on-failure] {:to ::loading-failed}}
+            ::loading-failed {[::fsm/after 10000]   {:to ::loading}}}})
+```
+
+The `:start` param (required) identifies the initial state of the FSM. 
+If you specify a `:stop` state, the machine will halt when it enters that state.
+
+The `:fsm` param is the interesting part. It's a map from states to available transitions. A transition key/value pair
+consists of a re-frame event and information about what happens to the FSM state when that event is seen.
+The actual event vector will usually contain more items, the FSM considers it a match if the event starts
+with the vector provided in the FSM.
+
+If an event is matched, the right-side map decides what happens next. It can transition into a new state,
+or dispatch re-frame events. Both are optional.
+
+There are 2 special "events" here:
+- `:kee-frame.fsm.alpha/after` triggers the specified number of ms after entering that state. Will not trigger if state has changed.
+- `:kee-frame.fsm.alpha/on-enter` triggers immediately when entering that state.
+
+FSMs can be started and stopped like this:
+
+```clojure
+(rf/dispatch [:kee-frame.fsm.alpha/start my-http-request-fsm])
+
+(rf/dispatch [:kee-frame.fsm.alpha/stop my-http-request-fsm])
+```
+
+Controllers have been extended to support returning FSM maps instead of event vectors. Like this:
+
+```clojure      
+(defn league-fsm [id]
+  {:id :league-fsm
+   ....})
+
+(k/reg-controller :league
+                  {:params (fn [route-data] ...)
+                   :start  (fn [ctx id] (league-fsm id)})
+```
+
+This FSM will be started and stopped by the controller start/stop lifecycle. See the demo app for extended examples.
+
 ## Introducing kee-frame into an existing app
 
 Several parts of kee-frame are designed to be opt-in. This means that you can include kee-frame in your project and start using parts of it.
@@ -361,57 +428,33 @@ The subscriptions available are:
 (rf/subscribe [:breaking-point.core/small-monitor?]) ;; true if window width is >= 992 and < 1200
 (rf/subscribe [:breaking-point.core/large-monitor?]) ;; true if window width is >= 1200
 ```
+## Websockets (removed since 0.4.0)
 
+I believe it was a mistake to introduce websockets into kee-frame. It's not what this library is
+about. The code has been put in a separate repo, and can be used as before. See docs at
+https://github.com/ingesolvoll/kee-frame-sockets
 
-## Websockets (experimental)
-
-Websocket support is activated by requiring the websocket namespace 
-```clojure
-(require '[kee-frame.websocket :as websocket])
-```
-Kee-frame hides the details of the websocket connection, leaving you with a couple of effects and events to control the
-situation. First, but not necessarily first, you want to establish the connection. That is done through a custom effect 
-in your event handler, like this:
-```clojure
-(reg-event-fx ::start-socket
-               (fn [{:keys [db]} _]
-                 {::websocket/open {:path         "/ws/"
-                                    :dispatch     ::your-socket-receiver-event ;; The re-frame event receiving server messages.
-                                    :format       :transit-json ;; Can be omitted, defaults to :edn
-                                    :wrap-message (fn [message] (assoc message :authToken (-> db :user :auth-token)))}}))
-```
-`:dispatch` is the re-frame event that should receive server-sent messages.
-
-`wrap-message` is a function used to transform the message just before sending to server. A typical use case is authentication
-tokens or other identifiers.
-
-This is how you send a message to the server:
-
-```clojure
-(reg-event-fx ::send-message
-              (fn [{:keys [db]} _]
-                {:dispatch [::websocket/send "/ws/" {:this-is "the message"
-                                                     :will-be "Automatically translated to edn/json/transit/etc"}]}))
-```
-You do not have to think about establishing the websocket before sending messages to it. Messages will be queued and sent
-when the socket becomes available.
-
-You might want to track the status of your socket. There's a subscription for that, goes like this:
-
-```clojure
- @(subscribe [:kee-frame.websocket/state "/ws/"])
-
-;; {:output-chan #object[cljs.core.async.impl.channels.ManyToManyChannel], 
-;; :state :connected, 
-;; :ws-chan #object[chord.channels.t_chord$channels19899]}
-
-```
-
-Websockets in kee-frame should be considered experimental, but might very well work for you. Help or bug reports would be highly appreciated.
+If you are a user of the websocket code and you find that the new lib has bugs, 
+please downgrade to kee-frame 0.3.4 and submit an issue.
 
 ## Error messages
 
 Helpful error messages are important to kee-frame. You should not get stuck because of "undefined is not a function". If you make a mistake, kee-frame should make it very clear to you what you did wrong and how you can fix it. If you find pain spots, please post an issue so we can find better solutions.
+
+## React error boundaries
+
+If you are unfamiliar with error boundaries, you can read the [docs](https://reactjs.org/docs/error-boundaries.html). After reading [this](https://lilac.town/writing/modern-react-in-cljs-error-boundaries/), I decided to include Will's code snippet
+in kee-frame. Usage:
+
+```clojure
+[kee-frame.error/boundary
+  [your-badly-behaving-component-here props]]
+```
+
+This will print JS errors inside the component on screen instead of breaking the whole rendering tree.
+You can optionally include your own error-handling component function as the first param.
+
+[Example usage from demo app](https://github.com/ingesolvoll/kee-frame-sample/blob/master/src/cljs/kee_frame_sample/core.cljs#L26)
 
 ## Scroll behavior on navigation
 In a traditional static website, the browser handles the scrolling for you nicely. Meaning that when you navigate back
@@ -430,7 +473,6 @@ The implementation of kee-frame is quite simple, building on rock solid librarie
 * [re-frame](https://github.com/Day8/re-frame) and [reagent](https://reagent-project.github.io/). The world needs to know about these 2 kings of frontend development, and we all need to contribute to their widespread use. This framework is an attempt in that direction.
 * [reitit](https://github.com/metosin/reitit). Simple and easy bidirectional routing, with very little noise in the syntax.
 * [accountant](https://github.com/venantius/accountant). A navigation library that hooks to any routing system. Made my life so much easier when I discovered it.
-* [chord](https://github.com/jarohen/chord). A server/client websocket library. Uses core.async as the main abstraction.
 * [etaoin](https://github.com/igrishaev/etaoin) and [lein-test-refresh](https://github.com/jakemcc/lein-test-refresh). 2 good examples of how powerful Clojure is. Etaoin makes browser integration testing fun again, while lein-test-refresh provides you with a development flow that no other platform will give you.
 
 Thank you!
